@@ -1,0 +1,5 @@
+node_modules/
+*.pack
+.angular/
+dist/
+package-lock.json
