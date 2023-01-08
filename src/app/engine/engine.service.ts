@@ -26,6 +26,7 @@ import {
   SceneLoader
 } from 'babylonjs';
 import 'babylonjs-materials';
+import { defineHex, Grid, Hex, Orientation, HexSettings, spiral } from 'honeycomb-grid';
 import { CustomLoadingScreen } from './../loadingscreen'
 //import * as config from './../../../package.json';
 
@@ -64,13 +65,6 @@ export class EngineService {
 
     this.scene = new Scene(this.engine);
 
-    //The math and properties for creating the hex grid.
-    let gridSize = 2;
-    let hexLength = 1;
-    let hexWidthDistance = Math.sqrt(3) * hexLength;
-    let hexHeightDistance = (2 * hexLength);
-    let rowlengthAddition = 0;
-
     var camera = new ArcRotateCamera("camera", Tools.ToRadians(90), Tools.ToRadians(45), 10, Vector3.Zero(), this.scene);
 
     camera.lowerRadiusLimit = 5;
@@ -78,14 +72,8 @@ export class EngineService {
     // This attaches the camera to the canvas
     camera.attachControl(canvas, true);
 
-    // create hex tile mesh asset container and add hex mesh to it
-    const hexTileMeshContainer = new AssetContainer(this.scene);
-    const shape = [ new Vector3(0, 0, 2), new Vector3(2, 0, 1), new Vector3(2, 0, -1), new Vector3(0, 0, -2), new Vector3(-2, 0, -1), new Vector3(-2, 0, 1) ];   
-    let hexTileMesh = MeshBuilder.CreatePolygon("polygon", {shape:shape, sideOrientation: Mesh.DOUBLESIDE }, this.scene, earcut);
-    hexTileMeshContainer.meshes.push(hexTileMesh);
-
     //create the hex grid
-    this.createHexGrid(gridSize, hexWidthDistance, hexHeightDistance, rowlengthAddition, hexTileMeshContainer, camera, this.scene);
+    this.createHexGrid(this.scene);
 
     // simple rotation along the y axis
     this.scene.registerAfterRender(() => {
@@ -112,51 +100,99 @@ export class EngineService {
     };
   }
 
-  public createHexGrid(gridSize, hexWidthDistance, hexHeightDistance, rowlengthAddition, hexTileMesh, camera, scene) {
+  public createHexGrid(scene) {
     try{
-      let gridStart = new Vector3((hexWidthDistance / 2) * (gridSize - 1), 0, (-hexHeightDistance * 0.75) * (gridSize - 1));
-      for (let i = 0; i < (gridSize * 2) - 1; i++) {
-        for (let y = 0; y < gridSize + rowlengthAddition; y++) {
-          let hexTile = hexTileMesh.instantiateModelsToScene(name => i.toString() + "-" + y.toString() + "_" + name, false);
-          let hexTileRoot = hexTile.rootNodes[0];
-          hexTileRoot.name = "hexTile" + i + y;
-          hexTileRoot.position.copyFrom(gridStart);
-          hexTileRoot.position.x -= hexWidthDistance * y;
-  
-          let hexChildren = hexTileRoot.getDescendants();
-          for (let k = 0; k < hexChildren.length; k++) {
-            hexChildren[k].name = hexChildren[k].name.slice(9);
-            if (hexChildren[k].name === "terrain") {
-              hexChildren[k].visibility = 0;
-            }
+      //The math and properties for creating the hex grid.
+      let gridSize = 5;
+      let gridDimensions = 30;
+
+      const defaultHexSettings: HexSettings = {
+        dimensions: { xRadius: gridDimensions, yRadius: gridDimensions }, // these make for tiny hexes
+        orientation: Orientation.FLAT, // flat top
+        origin: { x: 0, y: 0 }, // the center of the hex
+        offset: -1 // how rows or columns of hexes are placed relative to each other
+      }
+
+      const tile = defineHex(defaultHexSettings);
+      const grid = new Grid(tile, spiral({ start: [0, 0], radius:  gridSize})) 
+
+      let materials: StandardMaterial[] = [];
+      for(let i = 0; i < grid.size; i++){
+        let redRandom = Math.round(Math.random()*100);
+        let greenRandom =  Math.round(Math.random()*100);
+        let blueRandom =  Math.round(Math.random()*100);
+
+        let red = redRandom < 50 ? redRandom + 50 : redRandom;
+        let green = greenRandom < 50 ? greenRandom + 50 : greenRandom;
+        let blue = blueRandom < 50 ? blueRandom + 50 : blueRandom;
+
+        if((red + green + blue) > 115){
+          let randomColor = Math.random();
+          if(randomColor < 0.34){
+            red -= 30;
+          }else if(randomColor > 0.66){
+            green -= 30;
+          }else{
+            blue -= 30;
           }
-  
-          let hexTileAnimGroup = hexTile.animationGroups[0];
-          hexTileAnimGroup.name = "AnimGroup" + hexTileRoot.name;
-        };
-  
-        if (i >= gridSize - 1) {
-          rowlengthAddition -= 1;
-          gridStart.x -= hexWidthDistance / 2;
-          gridStart.z += hexHeightDistance * 0.75;
         }
-        else {
-          rowlengthAddition += 1;
-          gridStart.x += hexWidthDistance / 2;
-          gridStart.z += hexHeightDistance * 0.75;
-        }
+
+        let thisMaterial = new StandardMaterial("m_" + red.toString() + "-" + green.toString() + "-" + blue.toString(), scene);
+        thisMaterial.emissiveColor = new Color3(red / 100, green / 100, blue / 100);
+        thisMaterial.ambientColor = thisMaterial.emissiveColor;
+        thisMaterial.diffuseColor = thisMaterial.emissiveColor;
+        thisMaterial.specularColor = thisMaterial.emissiveColor;
+
+        materials.push(thisMaterial);
       };
+
+      let firstHex = grid.getHex([0, 0]);
+
+      console.log(firstHex);
+
+      if(firstHex == null){
+        throw("no hexes in grid");
+      };
+
+      const shape = [ new Vector3(firstHex.corners[0].x, 0, firstHex.corners[0].y), new Vector3(firstHex.corners[1].x, 0, firstHex.corners[1].y), new Vector3(firstHex.corners[2].x, 0, firstHex.corners[2].y), new Vector3(firstHex.corners[3].x, 0, firstHex.corners[3].y), new Vector3(firstHex.corners[4].x, 0, firstHex.corners[4].y), new Vector3(firstHex.corners[5].x, 0, firstHex.corners[5].y) ];   
+    
+      // create hex tile mesh asset container and add hex mesh to it
+      const hexTileMeshContainer = new AssetContainer(scene);
+
+      let hexTileMesh = MeshBuilder.CreatePolygon("hex", {shape: shape, sideOrientation: Mesh.DOUBLESIDE }, scene, earcut);
+
+      let hexIndex = -1;
+      
+      grid.forEach(hex => {
+        hexIndex++;
+        hexTileMeshContainer.meshes.splice(0);
+        hexTileMesh.material = materials[hexIndex];
+        hexTileMeshContainer.meshes.push(hexTileMesh);
+        
+        let hexTile = hexTileMeshContainer.instantiateModelsToScene(name => hex.q.toString() + "-" + hex.r.toString() + "_" + name, false );
+        let hexTileRoot = hexTile.rootNodes[0];
+        hexTileRoot.name = "hexTile" + hex.q + hex.r;
+        hexTileRoot.position.x = hex.x;
+        hexTileRoot.position.z = hex.y;
+
+        console.log(hexTileRoot);
+
+        let hexChildren = hexTileRoot.getDescendants();
+        for (let k = 0; k < hexChildren.length; k++) {
+          hexChildren[k].name = hexChildren[k].name.slice(9);
+        }
+      });
     } catch(e: any) {
-      console.log(e);
+      console.log("error: " + e);
     }
   }
 
   public handleMouseMove(event: MouseEvent) {
-    // console.log(`Coords: ${event.clientX} X ${event.clientY}`);
+   //  console.log(`Coords: ${event.clientX} X ${event.clientY}`);
   }
 
   public handleKeypress(event: KeyboardEvent) {
-    // console.log(`Key: ${event.key}`);
+     console.log(`Key: ${event.key}`);
   }
 
   public pointerlockchange() {

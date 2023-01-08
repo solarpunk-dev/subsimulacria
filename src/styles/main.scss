@@ -47,13 +47,13 @@ body {
 #splashlogo{
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: 60%;
+  top: 40%;
+  width: 80%;
   height: 50%;
-  margin-left: -30%;
-  margin-top:-15%;
+  margin-left: -40%;
+  margin-top:-25%;
   background: no-repeat center;
-  background-size: cover;
+  background-size: contain;
   background-image: url('./../assets/splash/logo.png');
 }
 
@@ -63,7 +63,7 @@ body {
   position: absolute;
   bottom: 15px;
   right: 20px;
-  color: #333;
+  color: #fff;
   cursor: default;
 }
 
@@ -74,11 +74,11 @@ body {
   position: absolute;
   bottom: 15px;
   left: 20px;
-  color: #333;
+  color: #fff;
 }
 
 #splashauthor a{
-  color: #33d;
+  color: #aaf;
 }
 
 .engine-wrapper{
