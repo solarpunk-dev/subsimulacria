@@ -29,6 +29,8 @@ import 'babylonjs-materials';
 import { defineHex, Grid, Hex, Orientation, HexSettings, spiral } from 'honeycomb-grid';
 import { CustomLoadingScreen } from './../loadingscreen'
 import { ISubBiome } from './../entities/sub-biome'
+import { IGeography } from '../entities/geography';
+import { Geography } from '../entities/geography-type';
 //import * as config from './../../../package.json';
 
 @Injectable({ providedIn: 'root' })
@@ -102,99 +104,134 @@ export class EngineService {
   }
 
   public createHexGrid(scene) {
-    try{
-      //The math and properties for creating the hex grid.
-      let gridSize = 5;
-      let gridDimensions = 30;
-
-      const defaultHexSettings: HexSettings = {
-        dimensions: { xRadius: gridDimensions, yRadius: gridDimensions }, // these make for tiny hexes
-        orientation: Orientation.FLAT, // flat top
-        origin: { x: 0, y: 0 }, // the center of the hex
-        offset: -1 // how rows or columns of hexes are placed relative to each other
-      }
-
-      const tile = defineHex(defaultHexSettings);
-      const grid = new Grid(tile, spiral({ start: [0, 0], radius:  gridSize})) 
-
-      let materials: StandardMaterial[] = [];
-      for(let i = 0; i < grid.size; i++){
-        let redRandom = Math.round(Math.random()*100);
-        let greenRandom =  Math.round(Math.random()*100);
-        let blueRandom =  Math.round(Math.random()*100);
-
-        let red = redRandom < 50 ? redRandom + 50 : redRandom;
-        let green = greenRandom < 50 ? greenRandom + 50 : greenRandom;
-        let blue = blueRandom < 50 ? blueRandom + 50 : blueRandom;
-
-        if((red + green + blue) > 115){
-          let randomColor = Math.random();
-          if(randomColor < 0.34){
-            red -= 30;
-          }else if(randomColor > 0.66){
-            green -= 30;
-          }else{
-            blue -= 30;
-          }
-        }
-
-        let thisMaterial = new StandardMaterial("m_" + red.toString() + "-" + green.toString() + "-" + blue.toString(), scene);
-        thisMaterial.emissiveColor = new Color3(red / 100, green / 100, blue / 100);
-        thisMaterial.ambientColor = thisMaterial.emissiveColor;
-        thisMaterial.diffuseColor = thisMaterial.emissiveColor;
-        thisMaterial.specularColor = thisMaterial.emissiveColor;
-
-        materials.push(thisMaterial);
-      };
-
-      let firstHex = grid.getHex([0, 0]);
-
-      console.log(firstHex);
-
-      if(firstHex == null){
-        throw("no hexes in grid");
-      };
-
-      const shape = [ new Vector3(firstHex.corners[0].x, 0, firstHex.corners[0].y), new Vector3(firstHex.corners[1].x, 0, firstHex.corners[1].y), new Vector3(firstHex.corners[2].x, 0, firstHex.corners[2].y), new Vector3(firstHex.corners[3].x, 0, firstHex.corners[3].y), new Vector3(firstHex.corners[4].x, 0, firstHex.corners[4].y), new Vector3(firstHex.corners[5].x, 0, firstHex.corners[5].y) ];   
-    
-      // create hex tile mesh asset container and add hex mesh to it
+    try
+    {
+      let geographies: IGeography[] = this.createGeographies(scene);
       const hexTileMeshContainer = new AssetContainer(scene);
 
-      let hexTileMesh = MeshBuilder.CreatePolygon("hex", {shape: shape, sideOrientation: Mesh.DOUBLESIDE }, scene, earcut);
+      const grid = this.createGrid(); 
+
+      let hexTemplate = grid.getHex([0, 0]);
+      if(hexTemplate == null){
+        throw('no hexes');
+      };
+
+      let hexTileMesh = this.createHexTileMesh(scene, hexTemplate);
 
       let hexIndex = -1;
       
       grid.forEach(hex => {
         hexIndex++;
 
-        let subBiome: ISubBiome = this.CalculateSubBiome(grid, hex);
+        let geography = this.calculateGeography(geographies, hex);
 
-        hex.data = subBiome;
-        
-        hexTileMeshContainer.meshes.splice(0);
-        hexTileMesh.material = materials[hexIndex];
-        hexTileMeshContainer.meshes.push(hexTileMesh);
-        
-        let hexTile = hexTileMeshContainer.instantiateModelsToScene(name => hex.q.toString() + "-" + hex.r.toString() + "_" + name, false );
-        let hexTileRoot = hexTile.rootNodes[0];
-        hexTileRoot.name = "hexTile" + hex.q + hex.r;
-        hexTileRoot.position.x = hex.x;
-        hexTileRoot.position.z = hex.y;
+        hex.data = this.calculateSubBiome(grid, geography, hex);
 
-        console.log(hexTileRoot);
-
-        let hexChildren = hexTileRoot.getDescendants();
-        for (let k = 0; k < hexChildren.length; k++) {
-          hexChildren[k].name = hexChildren[k].name.slice(9);
-        }
-
+        this.createHexTerrain(hexTileMesh, hexTileMeshContainer, hex, geography, hex.data );
       });
+
     } catch(e: any) {
       console.log("error: " + e);
     }
   }
 
-  public CalculateSubBiome(grid: Grid<Hex>, hex: Hex){
+  public createHexTileMesh(scene, hex: Hex)
+  {
+    const shape = [ new Vector3(hex.corners[0].x, 0, hex.corners[0].y), new Vector3(hex.corners[1].x, 0, hex.corners[1].y), new Vector3(hex.corners[2].x, 0, hex.corners[2].y), new Vector3(hex.corners[3].x, 0, hex.corners[3].y), new Vector3(hex.corners[4].x, 0, hex.corners[4].y), new Vector3(hex.corners[5].x, 0, hex.corners[5].y) ];   
+    
+    return MeshBuilder.CreatePolygon("hex", {shape: shape, sideOrientation: Mesh.DOUBLESIDE }, scene, earcut);
+  }
+
+  public createGrid(){
+    //The math and properties for creating the hex grid.
+    let gridSize = 5;
+    let gridDimensions = 30;
+
+    const defaultHexSettings: HexSettings = {
+      dimensions: { xRadius: gridDimensions, yRadius: gridDimensions }, // these make for tiny hexes
+      orientation: Orientation.FLAT, // flat top
+      origin: { x: 0, y: 0 }, // the center of the hex
+      offset: -1 // how rows or columns of hexes are placed relative to each other
+    }
+
+    let tile = defineHex(defaultHexSettings);
+
+    return new Grid(tile, spiral({ start: [0, 0], radius:  gridSize}));
+  }
+
+  public calculateGeography(geographies: IGeography[], hex: Hex){
+    if(hex.center.x == 0 && hex.center.y ==0 )
+    {
+      let centerGeographyIndex = geographies.findIndex(g => g.name == 'flatland');
+      if(centerGeographyIndex < 0)
+      {
+        throw('no geography');
+      }
+
+      return geographies[centerGeographyIndex];
+    }
+
+    let thisGeographyIndex = Math.floor(Math.random() * geographies.length);
+    return geographies[thisGeographyIndex];
+  }
+
+  public createHexTerrain(hexTileMesh: Mesh, hexTileMeshContainer: AssetContainer, hex: Hex, geography: IGeography, subBiome: ISubBiome){
+    hexTileMeshContainer.meshes.splice(0);
+    hexTileMesh.material = geography.material;
+    hexTileMeshContainer.meshes.push(hexTileMesh);
+    
+    let hexTile = hexTileMeshContainer.instantiateModelsToScene(name => hex.q.toString() + "-" + hex.r.toString() + "_" + name, false );
+    let hexTileRoot = hexTile.rootNodes[0];
+    hexTileRoot.name = "hexTile" + hex.q + hex.r;
+    hexTileRoot.position.x = hex.x;
+    hexTileRoot.position.z = hex.y;
+
+    let hexChildren = hexTileRoot.getDescendants();
+    for (let k = 0; k < hexChildren.length; k++) {
+      hexChildren[k].name = hexChildren[k].name.slice(9);
+    }
+  }
+
+  public createGeographies(scene){
+    let geographies: IGeography[] = [];
+
+    let geographyData: Geography[] = ['flatland', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'];
+
+    for(let i = 0; i < geographyData.length; i++){
+      let redRandom = Math.round(Math.random()*100);
+      let greenRandom =  Math.round(Math.random()*100);
+      let blueRandom =  Math.round(Math.random()*100);
+
+      let red = redRandom < 50 ? redRandom + 50 : redRandom;
+      let green = greenRandom < 50 ? greenRandom + 50 : greenRandom;
+      let blue = blueRandom < 50 ? blueRandom + 50 : blueRandom;
+
+      if((red + green + blue) > 115){
+        let randomColor = Math.random();
+        if(randomColor < 0.34){
+          red -= 30;
+        }else if(randomColor > 0.66){
+          green -= 30;
+        }else{
+          blue -= 30;
+        }
+      }
+
+      let thisMaterial = new StandardMaterial("m_" + red.toString() + "-" + green.toString() + "-" + blue.toString(), scene);
+      thisMaterial.emissiveColor = new Color3(red / 100, green / 100, blue / 100);
+      thisMaterial.ambientColor = thisMaterial.emissiveColor;
+      thisMaterial.diffuseColor = thisMaterial.emissiveColor;
+      thisMaterial.specularColor = thisMaterial.emissiveColor;
+
+      let thisGeography: IGeography = { material : thisMaterial, name : geographyData[i]};
+
+      geographies.push(thisGeography);
+    };
+
+    return geographies;
+  }
+
+  public calculateSubBiome(grid: Grid<Hex>, geography :IGeography, hex: Hex){
     let climateId = "savanna";
     let biomeId = "tropical-savanna";
     let subBiomeId = "tree-savanna"
