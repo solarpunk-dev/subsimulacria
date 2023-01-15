@@ -28,6 +28,7 @@ import {
 import 'babylonjs-materials';
 import { defineHex, Grid, Hex, Orientation, HexSettings, spiral } from 'honeycomb-grid';
 import { CustomLoadingScreen } from './../loadingscreen'
+import { ISubBiome } from './../entities/sub-biome'
 //import * as config from './../../../package.json';
 
 @Injectable({ providedIn: 'root' })
@@ -165,6 +166,11 @@ export class EngineService {
       
       grid.forEach(hex => {
         hexIndex++;
+
+        let subBiome: ISubBiome = this.CalculateSubBiome(grid, hex);
+
+        hex.data = subBiome;
+        
         hexTileMeshContainer.meshes.splice(0);
         hexTileMesh.material = materials[hexIndex];
         hexTileMeshContainer.meshes.push(hexTileMesh);
@@ -181,10 +187,28 @@ export class EngineService {
         for (let k = 0; k < hexChildren.length; k++) {
           hexChildren[k].name = hexChildren[k].name.slice(9);
         }
+
       });
     } catch(e: any) {
       console.log("error: " + e);
     }
+  }
+
+  public CalculateSubBiome(grid: Grid<Hex>, hex: Hex){
+    let climateId = "savanna";
+    let biomeId = "tropical-savanna";
+    let subBiomeId = "tree-savanna"
+
+    console.log(hex);
+
+    let subBiome: ISubBiome = {
+      biomeId: biomeId,
+      climateId: climateId,
+      subBiomeId: subBiomeId,
+      dimension: 1
+    };
+    
+    return subBiome;
   }
 
   public handleMouseMove(event: MouseEvent) {
